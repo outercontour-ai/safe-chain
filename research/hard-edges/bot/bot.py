@@ -39,7 +39,7 @@ PARAMS_T = "(address,address,bool,uint256,uint256,uint160,uint160,int256)"
 _sess = requests.Session()
 def rpc(method, params, timeout=20):
     last = None
-    for i in range(4):
+    for i in range(8):
         u = RPCS[i % len(RPCS)]
         try:
             j = _sess.post(u, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params}, timeout=timeout).json()
@@ -48,7 +48,7 @@ def rpc(method, params, timeout=20):
             if isinstance(last, dict) and (last.get("code") == 3 or "revert" in str(last)): raise RuntimeError(str(last))
         except RuntimeError: raise
         except Exception as e: last = str(e)[:120]
-        time.sleep(0.2)
+        time.sleep(3.0 if "rate limit" in str(last).lower() else 0.2)
     raise RuntimeError(f"rpc {method} failed: {last}")
 def sel(sig): return Web3.keccak(text=sig)[:4].hex()
 def call(to, sig, args=(), types=(), out=None, block="latest"):
@@ -74,7 +74,7 @@ class PoolSim:
         slot0 = call(self.addr, "slot0()", block=blk)
         self.sqrtP = int(slot0[2:66], 16) / Q96; self.tick = s2(int(slot0[66:130], 16))
         self.L = call(self.addr, "liquidity()", out=("uint128",), block=blk)[0]
-        R = int(math.log(1.05) / math.log(1.0001)); lo_c = (self.tick - R) // self.ts; hi_c = (self.tick + R) // self.ts
+        R = int(math.log(1.02) / math.log(1.0001)); lo_c = (self.tick - R) // self.ts; hi_c = (self.tick + R) // self.ts   # +-2%: arbs move prices by bps
         self.net = {}
         for w in range(lo_c >> 8, (hi_c >> 8) + 1):
             bm = call(self.addr, "tickBitmap(int16)", (w,), ("int16",), out=("uint256",), block=blk)[0]
@@ -86,7 +86,7 @@ class PoolSim:
                         t = c * self.ts
                         r = call(self.addr, "ticks(int24)", (t,), ("int24",), block=blk)
                         _, netl = decode(["uint128", "int128"], bytes.fromhex(r[2:130]))
-                        self.net[t] = netl
+                        self.net[t] = netl; time.sleep(0.02)      # be gentle with public endpoints
         self._keys = None; self.init_block = block
     def keys(self):
         if self._keys is None: self._keys = sorted(k for k, v in self.net.items() if v)
