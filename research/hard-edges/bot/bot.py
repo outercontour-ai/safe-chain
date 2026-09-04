@@ -20,6 +20,7 @@ MIN_PROFIT_USD = float(os.environ.get("MIN_PROFIT_USD", "3"))
 PRIORITY_GWEI = float(os.environ.get("PRIORITY_GWEI", "0.02"))
 MAX_GAS_GWEI = float(os.environ.get("MAX_GAS_GWEI", "0.05"))
 LOG = os.environ.get("LOG", "bot.log.jsonl")
+PRECHECK = os.environ.get("PRECHECK", "1") == "1"   # eth_call before sending; 0 = trust the contract's early revert (faster)
 EXECUTOR = os.environ.get("EXECUTOR"); KEY = os.environ.get("PRIVATE_KEY")
 GAS_UNITS = 340_000; L1_FEE_USD = 0.004
 Q96 = 2**96
@@ -226,11 +227,13 @@ class Bot:
         data = "0x" + SEL_EXEC + encode([PARAMS_T], [params]).hex()
         if not (EXECUTOR and self.acct):
             log(event="dry_run_would_send", block=n, params=[str(v) for v in params]); return
-        try:
-            r = rpc("eth_call", [{"from": self.acct.address, "to": EXECUTOR, "data": data, "gas": hex(1_500_000)}, "latest"])
-            sim_profit = decode(["int256"], bytes.fromhex(r[2:]))[0]
-        except Exception as e:
-            log(event="precheck_revert", block=n, err=str(e)[:200]); print("  precheck revert:", str(e)[:100], flush=True); return
+        sim_profit = None
+        if PRECHECK:
+            try:
+                r = rpc("eth_call", [{"from": self.acct.address, "to": EXECUTOR, "data": data, "gas": hex(1_500_000)}, "latest"])
+                sim_profit = decode(["int256"], bytes.fromhex(r[2:]))[0]
+            except Exception as e:
+                log(event="precheck_revert", block=n, err=str(e)[:200]); print("  precheck revert:", str(e)[:100], flush=True); return
         tx = {"to": EXECUTOR, "data": data, "gas": GAS_UNITS + 60_000, "chainId": 8453, "nonce": self.nonce, "value": 0,
               "maxFeePerGas": int((gas_price * 2 + PRIORITY_GWEI) * 1e9), "maxPriorityFeePerGas": int(PRIORITY_GWEI * 1e9), "type": 2}
         signed = self.acct.sign_transaction(tx)
