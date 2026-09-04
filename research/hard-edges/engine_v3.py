@@ -16,6 +16,7 @@ class V3Sim:
     def __init__(self, chain, pool, ts, fee, init_block, words=3, pct=0.05):
         self.chain, self.pool, self.ts, self.f = chain, pool, ts, fee
         self.net = {}         # tick -> liquidityNet
+        self._keys = None     # cached sorted initialised ticks
         self.sqrtP = None; self.L = None; self.tick = None
         self.init_block = init_block
         slot0 = call(chain, pool, "slot0()", block=init_block)
@@ -42,10 +43,15 @@ class V3Sim:
             return t, net
         with ThreadPoolExecutor(6) as ex:
             for t, net in ex.map(fetch, cand): self.net[t] = net
+        self._keys = None
         self.n_init_ticks = len(self.net)
+    def keys(self):
+        if self._keys is None: self._keys = sorted(k for k, v in self.net.items() if v != 0)
+        return self._keys
     def unapply_log(self, l):
         """Reverse a Mint/Burn (used to roll the liquidity map back from an init-at-head snapshot)."""
         t0 = l["topics"][0]; data = bytes.fromhex(l["data"][2:])
+        if t0 in (TOPIC_MINT, TOPIC_BURN): self._keys = None
         if t0 == TOPIC_MINT:
             lo = int(l["topics"][2], 16); hi = int(l["topics"][3], 16)
             lo = lo - 2**256 if lo >= 2**255 else lo; hi = hi - 2**256 if hi >= 2**255 else hi
@@ -58,6 +64,7 @@ class V3Sim:
             self.net[lo] = self.net.get(lo, 0) + amt; self.net[hi] = self.net.get(hi, 0) - amt
     def apply_log(self, l):
         t0 = l["topics"][0]; data = bytes.fromhex(l["data"][2:])
+        if t0 in (TOPIC_MINT, TOPIC_BURN): self._keys = None
         if t0 == TOPIC_MINT:
             lo = int(l["topics"][2], 16); hi = int(l["topics"][3], 16)
             lo = lo - 2**256 if lo >= 2**255 else lo; hi = hi - 2**256 if hi >= 2**255 else hi
@@ -80,12 +87,12 @@ class V3Sim:
     def swap_to(self, target_sqrt):
         """Simulate swapping until sqrt price hits target. Returns (amount_in_incl_fee, amount_out, ran_dry, crossings)."""
         s, L, tick = self.sqrtP, self.L, self.tick
-        net = dict(self.net)
+        net = self.net
+        keys = self.keys()
         zeroForOne = target_sqrt < s
         a_in = a_out = 0.0; crossings = 0; dry = False
         for _ in range(500):
             if (zeroForOne and s <= target_sqrt) or (not zeroForOne and s >= target_sqrt): break
-            keys = sorted(k for k, v in net.items() if v != 0)
             if zeroForOne:
                 i = bisect.bisect_right(keys, tick) - 1
                 # the tick at 'tick' itself is the lower bound of the current range only if price is above it
@@ -175,7 +182,9 @@ def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0")
             if e is None: continue
             last_e = e
         if sim.sqrtP is None or last_e is None: continue
-        A = anchor(b, clock.ts(b)); A_raw = A/scale
+        A = anchor(b, clock.ts(b))
+        if A is None: continue
+        A_raw = A/scale
         P = sim.sqrtP**2*scale; gap = P/A - 1
         r = size_exact(sim, A_raw, set(allow))
         m = dict(gap=gap, P=P, A=A, dir=r[0] if r else None, profit=(r[1]/10**d1*token1_usd - gas_usd) if r else 0.0, amt=r[2] if r else 0, dry=r[3] if r else False)
