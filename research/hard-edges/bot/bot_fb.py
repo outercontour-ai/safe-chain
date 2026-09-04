@@ -58,6 +58,8 @@ class FlashBot(Bot):
             except Exception as e: print("pending logs error:", str(e)[:80], flush=True); return
             self.n_polls += 1
             applied = self.apply_logs(logs)
+            if self.n_polls % 300 == 0:
+                print(f"heartbeat: block {block} fb {index} | frames {self.n_frames} polls {self.n_polls} | pending logs {len(logs)} new {applied} | poll {1000*(time.time()-t0):.0f}ms lag {1000*(time.time()-t_arrival):.0f}ms | ETH {self.eth_usd():.0f}", flush=True)
             if applied == 0: return
             if time.time() - self.last_gas_t > 10:
                 try: self.gas_price = int(rpc("eth_gasPrice", []), 16) / 1e9; self.last_gas_t = time.time()
