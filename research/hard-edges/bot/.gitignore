@@ -1,4 +1,5 @@
-dryrun.out
-validate.out
-chain.done
+fb_record.jsonl
+*.out
 bot.log.jsonl
+chain.done
+__pycache__/
