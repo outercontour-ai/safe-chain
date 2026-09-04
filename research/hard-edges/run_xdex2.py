@@ -1,4 +1,5 @@
 """Cross-DEX closure speed, v2: pool X sized exactly against pool Y's marginal price WITH Y's fee charged.
+import os
 sell0 on X (token0 in) needs token1->token0 on Y at P_Y/(1-fY); buy0 on X needs token0->token1 on Y at P_Y*(1-fY).
 Y is treated as infinitely deep at its marginal price, so window *existence* is exact, profit is an upper bound."""
 import sys, json
@@ -26,4 +27,4 @@ for X, Y in pairs:
     m = dict(res[0]); m["windows"] = w; m["n_windows"] = len(w); m["label"] = f"{chain} X={X} (fee {fees[X]*1e4:.0f}bp) vs Y={Y} (fee {fy*1e4:.0f}bp charged)"
     from engine import report; report(m)
     out.append(m); sys.stdout.flush()
-    json.dump(out, open(f"res_xdex2_{chain}.json", "w"))
+    json.dump(out, open(os.environ.get("OUT", f"res_xdex2_{chain}.json"), "w"))
