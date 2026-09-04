@@ -9,9 +9,11 @@ UNIV3 = "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"; AEROCL = "0x5e7BB104d84c7C
 T_INIT = "0x" + Web3.keccak(text="Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)").hex()
 T_SWAP = "0x" + Web3.keccak(text="Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)").hex()
 DAYS = float(sys.argv[1]) if len(sys.argv) > 1 else 30
-h = head("base"); fb = h - int(DAYS*86400/2)
+SWAP_DAYS = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
+h = head("base"); fb = h - int(DAYS*86400/2); fbs = h - int(SWAP_DAYS*86400/2)
 inits = get_logs("base", PM, fb, h, topics=[T_INIT], cache_key="v4_init")
-swaps = get_logs("base", PM, fb, h, topics=[T_SWAP], cache_key="v4_swap")
+# V4 swap volume on Base is huge (Clanker); count activity over a short recent window only
+swaps = get_logs("base", PM, fbs, h, topics=[T_SWAP], cache_key="v4_swap_short")
 print("V4 pools initialised:", len(inits), "swaps:", len(swaps)); sys.stdout.flush()
 nswaps = Counter(l["topics"][1] for l in swaps)
 pools = {}
