@@ -5,7 +5,7 @@ import json, glob, sys
 from collections import defaultdict
 from chain import *
 from engine import decode_swap, Q96
-ETH = 3500.0
+ETH = 2450.0
 POOLS = {"base AeroCL WETH/USDC ts100": ("base","0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",18,6,True),
          "base UniV3 WETH/USDC 0.05%":  ("base","0xd0b53d9277642d899df5c87a3966a349a798f224",18,6,True),
          "base PancakeV3 WETH/USDC 0.01%":("base","0x72ab388e2e2f6facef59e3c3fa2c4e29011c2d38",18,6,True),

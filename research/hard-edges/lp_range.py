@@ -4,7 +4,7 @@ Emissions accrue to active liquidity only (share = L_me / (L_active + L_me))."""
 import sys, json, glob, math
 from chain import *
 from engine import decode_swap, Q96
-ETH = 3500.0
+ETH = 2450.0
 chain = "base"; pool = sys.argv[3] if len(sys.argv) > 3 else "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59"; d0, d1 = 18, 6
 emis_usd_per_day = float(sys.argv[1]) if len(sys.argv) > 1 else 16850.0
 days_arg = float(sys.argv[2]) if len(sys.argv) > 2 else None
