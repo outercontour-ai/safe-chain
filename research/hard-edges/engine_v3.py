@@ -143,7 +143,7 @@ def size_exact(sim, A_raw, allow):
     return best
 
 def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0"), anchor_contract=None,
-        gas_usd=0.03, min_profit_usd=0.05, checkpoint_blocks=None, label="", to_block=None, verbose=True, words=3, validate=True, init_at_head=False, from_block=None):
+        gas_usd=0.03, min_profit_usd=0.05, checkpoint_blocks=None, label="", to_block=None, verbose=True, words=3, validate=True, init_at_head=False, from_block=None, pct=0.05):
     h = to_block or head(chain); span = int(days*86400/CHAINS[chain]["block_time"]); fb = from_block or max(1, h-span)
     fee = call(chain, pool, "fee()", out=("uint24",))[0]; f = fee/1e6
     ts = call(chain, pool, "tickSpacing()", out=("int24",))[0]
@@ -154,11 +154,11 @@ def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0")
         if not code_at_fb or code_at_fb == "0x": init_at_head = True     # pool created inside the window: snapshot at h and roll back
     if init_at_head:
         # no archive needed: snapshot the tick map at h, then roll Mint/Burn back to fb-1; price state comes from the first Swap
-        sim = V3Sim(chain, pool, ts, f, h, words=words)
+        sim = V3Sim(chain, pool, ts, f, h, words=words, pct=pct)
         for l in reversed(logs): sim.unapply_log(l)
         sim.sqrtP = None; sim.L = None; sim.tick = None
     else:
-        sim = V3Sim(chain, pool, ts, f, fb - 1, words=words)
+        sim = V3Sim(chain, pool, ts, f, fb - 1, words=words, pct=pct)
     scale = 10**(d0-d1)
     anchor_txs = {}
     if anchor_contract:

@@ -25,8 +25,9 @@ for X in names:
         sy, fy = series[Y], fees[Y]
         for allow, adj in (("1to0", 1/(1-fy)), ("0to1", 1-fy)):
             r = run("base", POOLS[X], 0, lambda b, t, sy=sy, adj=adj: (None if sy.price(b) is None else sy.price(b)*adj), d0, d1,
-                    allow=(allow,), gas_usd=0.03, min_profit_usd=0.5, label=f"{X} vs {Y} {allow}", from_block=b0, to_block=b1, words=2, validate=False, verbose=False, checkpoint_blocks=10**9)
+                    allow=(allow,), gas_usd=0.03, min_profit_usd=0.5, label=f"{X} vs {Y} {allow}", from_block=b0, to_block=b1, words=2, validate=False, verbose=False, checkpoint_blocks=10**9, pct=0.01)
             for w in r["windows"]: w["pair"] = f"{X} vs {Y}"; wins.append(w)
+            print(f"  {X} vs {Y} {allow}: {len(r['windows'])} windows", flush=True)
 print(f"windows with profit > $0.5 in the recorded range: {len(wins)}  (per day equivalent: {len(wins)/((b1-b0+1)*2/86400):.0f})")
 cat = Counter(); detail = []
 for w in wins:
