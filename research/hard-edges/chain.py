@@ -17,7 +17,7 @@ _sess = requests.Session()
 class RpcError(Exception): pass
 class Reverted(RpcError): pass
 
-def rpc(chain, method, params, timeout=60, tries=6):
+def rpc(chain, method, params, timeout=60, tries=10):
     urls = CHAINS[chain]["rpcs"]
     last = None
     for i in range(tries):
@@ -38,7 +38,10 @@ def rpc(chain, method, params, timeout=60, tries=6):
         except RpcError: raise
         except Exception as e:
             last = str(e)[:200]
-        time.sleep(min(8, 0.5 * 2**i) + random.random()*0.3)
+        if "rate limit" in str(last).lower() or "429" in str(last):
+            time.sleep(min(20, 3 * (i + 1)) + random.random())
+        else:
+            time.sleep(min(8, 0.5 * 2**i) + random.random()*0.3)
     raise RpcError(f"{chain} {method} failed: {last}")
 
 def sel(sig): return Web3.keccak(text=sig)[:4].hex()

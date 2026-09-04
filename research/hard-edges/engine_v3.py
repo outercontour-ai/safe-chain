@@ -41,7 +41,7 @@ class V3Sim:
             r = call(chain, pool, "ticks(int24)", (t,), ("int24",), block=init_block)
             gross, net = decode(["uint128","int128"], bytes.fromhex(r[2:66+64]))
             return t, net
-        with ThreadPoolExecutor(6) as ex:
+        with ThreadPoolExecutor(3) as ex:
             for t, net in ex.map(fetch, cand): self.net[t] = net
         self._keys = None
         self.n_init_ticks = len(self.net)

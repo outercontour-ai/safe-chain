@@ -26,4 +26,4 @@ for X, Y in pairs:
     m = dict(res[0]); m["windows"] = w; m["n_windows"] = len(w); m["label"] = f"{chain} X={X} (fee {fees[X]*1e4:.0f}bp) vs Y={Y} (fee {fy*1e4:.0f}bp charged)"
     from engine import report; report(m)
     out.append(m); sys.stdout.flush()
-json.dump(out, open(f"res_xdex2_{chain}.json", "w"))
+    json.dump(out, open(f"res_xdex2_{chain}.json", "w"))
