@@ -128,6 +128,7 @@ Arbitrum $0.018, Unichain $0.001, mainnet $0.08 (при 0.09 gwei; в загру
 | base | AeroCL ts100 (fee 3bp) | UniV3 0.05% (fee 5bp charged) | 32.2 | 130/161 | 0 (0.0) | 3 (6.0) | 847 | 931 |
 | base | AeroCL ts100 (fee 3bp) | PancakeV3 0.01% (fee 1bp charged) | 291.0 | 1096/1455 | 0 (0.0) | 5 (10.0) | 1627 | 2023 |
 | base | PancakeV3 0.01% (fee 1bp) | UniV3 0.05% (fee 5bp charged) | 28.4 | 136/142 | 0 (0.0) | 0 (0.0) | 298 | 317 |
+| base | PancakeV3 0.01% (fee 1bp) | AeroCL ts100 (fee 3bp charged) | 208.8 | 505/1044 | 1 (2.0) | 3 (6.0) | 448 | 658 |
 | op | UniV3 0.05% (fee 5bp) | VeloCL ts100 (fee 3bp charged) | 15.6 | 75/78 | 0 (0.0) | 0 (0.0) | 71 | 72 |
 | op | VeloCL ts100 (fee 3bp) | UniV3 0.05% (fee 5bp charged) | 13.2 | 54/66 | 0 (0.0) | 1 (2.0) | 67 | 80 |
 
