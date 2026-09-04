@@ -149,6 +149,9 @@ def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0")
     ts = call(chain, pool, "tickSpacing()", out=("int24",))[0]
     clock = BlockClock(chain, fb, h)
     logs = sorted(get_logs(chain, pool, fb, h, cache_key=f"swaps_{pool.lower()}"), key=lambda l:(int(l["blockNumber"],16), int(l["logIndex"],16)))
+    if not init_at_head:
+        code_at_fb = rpc(chain, "eth_getCode", [pool, hex(fb - 1)])
+        if not code_at_fb or code_at_fb == "0x": init_at_head = True     # pool created inside the window: snapshot at h and roll back
     if init_at_head:
         # no archive needed: snapshot the tick map at h, then roll Mint/Burn back to fb-1; price state comes from the first Swap
         sim = V3Sim(chain, pool, ts, f, h, words=words)
