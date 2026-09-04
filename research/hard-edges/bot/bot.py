@@ -14,7 +14,7 @@ import requests
 from web3 import Web3
 from eth_abi import encode, decode
 
-RPCS = [u for u in os.environ.get("RPC_HTTP", "https://mainnet.base.org,https://base.drpc.org").split(",") if u]
+RPCS = [u for u in os.environ.get("RPC_HTTP", "https://mainnet.base.org,https://base-rpc.publicnode.com,https://base.drpc.org").split(",") if u]
 WS_URL = os.environ.get("RPC_WS", "wss://base-rpc.publicnode.com")
 MIN_PROFIT_USD = float(os.environ.get("MIN_PROFIT_USD", "3"))
 PRIORITY_GWEI = float(os.environ.get("PRIORITY_GWEI", "0.02"))
@@ -76,17 +76,21 @@ class PoolSim:
         self.L = call(self.addr, "liquidity()", out=("uint128",), block=blk)[0]
         R = int(math.log(1.02) / math.log(1.0001)); lo_c = (self.tick - R) // self.ts; hi_c = (self.tick + R) // self.ts   # +-2%: arbs move prices by bps
         self.net = {}
+        cand = []
         for w in range(lo_c >> 8, (hi_c >> 8) + 1):
             bm = call(self.addr, "tickBitmap(int16)", (w,), ("int16",), out=("uint256",), block=blk)[0]
             if not bm: continue
             for bit in range(256):
                 if bm >> bit & 1:
                     c = (w << 8) + bit
-                    if lo_c <= c <= hi_c:
-                        t = c * self.ts
-                        r = call(self.addr, "ticks(int24)", (t,), ("int24",), block=blk)
-                        _, netl = decode(["uint128", "int128"], bytes.fromhex(r[2:130]))
-                        self.net[t] = netl; time.sleep(0.02)      # be gentle with public endpoints
+                    if lo_c <= c <= hi_c: cand.append(c * self.ts)
+        from concurrent.futures import ThreadPoolExecutor
+        def fetch(t):
+            r = call(self.addr, "ticks(int24)", (t,), ("int24",), block=blk)
+            return t, decode(["uint128", "int128"], bytes.fromhex(r[2:130]))[1]
+        with ThreadPoolExecutor(3) as ex:
+            for t, netl in ex.map(fetch, cand): self.net[t] = netl
+        print(f"  {self.name}: tick map {len(cand)} ticks within +-2% at block {block}", flush=True)
         self._keys = None; self.init_block = block
     def keys(self):
         if self._keys is None: self._keys = sorted(k for k, v in self.net.items() if v)
