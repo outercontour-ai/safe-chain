@@ -8,7 +8,7 @@ CHAINS = {
  "op":       dict(rpcs=["https://mainnet.optimism.io","https://optimism.drpc.org"], block_time=2.0, logs_chunk=10_000),
  "unichain": dict(rpcs=["https://unichain.drpc.org"], block_time=1.0, logs_chunk=10_000),
  "arb":      dict(rpcs=["https://arb1.arbitrum.io/rpc","https://arbitrum.drpc.org"], block_time=0.25, logs_chunk=10_000),
- "eth":      dict(rpcs=["https://ethereum-rpc.publicnode.com","https://eth.drpc.org"], block_time=12.0, logs_chunk=10_000),
+ "eth":      dict(rpcs=["https://rpc.mevblocker.io","https://eth-mainnet.public.blastapi.io","https://eth-pokt.nodies.app"], block_time=12.0, logs_chunk=10_000),
 }
 CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 os.makedirs(CACHE, exist_ok=True)
@@ -31,7 +31,8 @@ def rpc(chain, method, params, timeout=60, tries=6):
             if "revert" in msg or (isinstance(last, dict) and last.get("code") == 3):
                 raise Reverted(msg)
             # non-retryable: range/result-size errors -> raise so caller can split
-            if any(k in msg for k in ("exceeds", "too large", "limited to", "Block range", "more than")):
+            ml = msg.lower()
+            if method == "eth_getLogs" and any(k in ml for k in ("exceed", "too large", "limited", "range", "more than", "up to", "too many", "response size")):
                 raise RpcError(msg)
         except Reverted: raise
         except RpcError: raise
