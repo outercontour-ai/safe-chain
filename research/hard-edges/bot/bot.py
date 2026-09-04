@@ -74,7 +74,7 @@ class PoolSim:
         slot0 = call(self.addr, "slot0()", block=blk)
         self.sqrtP = int(slot0[2:66], 16) / Q96; self.tick = s2(int(slot0[66:130], 16))
         self.L = call(self.addr, "liquidity()", out=("uint128",), block=blk)[0]
-        R = int(math.log(1.02) / math.log(1.0001)); lo_c = (self.tick - R) // self.ts; hi_c = (self.tick + R) // self.ts   # +-2%: arbs move prices by bps
+        R = int(math.log(1.01) / math.log(1.0001)); lo_c = (self.tick - R) // self.ts; hi_c = (self.tick + R) // self.ts   # +-1%: arbs move prices by bps; Mint/Burn replay keeps it fresh
         self.net = {}
         cand = []
         for w in range(lo_c >> 8, (hi_c >> 8) + 1):
@@ -90,7 +90,7 @@ class PoolSim:
             return t, decode(["uint128", "int128"], bytes.fromhex(r[2:130]))[1]
         with ThreadPoolExecutor(3) as ex:
             for t, netl in ex.map(fetch, cand): self.net[t] = netl
-        print(f"  {self.name}: tick map {len(cand)} ticks within +-2% at block {block}", flush=True)
+        print(f"  {self.name}: tick map {len(cand)} ticks within +-1% at block {block}", flush=True)
         self._keys = None; self.init_block = block
     def keys(self):
         if self._keys is None: self._keys = sorted(k for k, v in self.net.items() if v)
@@ -204,8 +204,8 @@ class Bot:
         self.head = n; self.n_blocks += 1
         if self.n_blocks % 150 == 0:
             for p in self.pools.values(): p.refresh_fee()
-        if self.n_blocks % 3000 == 0:
-            for p in self.pools.values(): p.init_state(n)     # periodic resync of the tick map
+        if self.n_blocks % 20000 == 0:
+            for p in self.pools.values(): p.init_state(n)     # periodic resync of the tick map (~11h); takes a few minutes on public RPC
         eth = self.eth_usd(); b = best_cycle(self.pools, eth)
         gas_price = int(rpc("eth_gasPrice", []), 16) / 1e9
         gas_usd = GAS_UNITS * (gas_price + PRIORITY_GWEI) * 1e-9 * eth + L1_FEE_USD
