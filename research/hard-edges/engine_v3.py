@@ -143,8 +143,8 @@ def size_exact(sim, A_raw, allow):
     return best
 
 def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0"), anchor_contract=None,
-        gas_usd=0.03, min_profit_usd=0.05, checkpoint_blocks=None, label="", to_block=None, verbose=True, words=3, validate=True, init_at_head=False):
-    h = to_block or head(chain); span = int(days*86400/CHAINS[chain]["block_time"]); fb = max(1, h-span)
+        gas_usd=0.03, min_profit_usd=0.05, checkpoint_blocks=None, label="", to_block=None, verbose=True, words=3, validate=True, init_at_head=False, from_block=None):
+    h = to_block or head(chain); span = int(days*86400/CHAINS[chain]["block_time"]); fb = from_block or max(1, h-span)
     fee = call(chain, pool, "fee()", out=("uint24",))[0]; f = fee/1e6
     ts = call(chain, pool, "tickSpacing()", out=("int24",))[0]
     clock = BlockClock(chain, fb, h)
@@ -193,10 +193,10 @@ def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0")
         m = dict(gap=gap, P=P, A=A, dir=r[0] if r else None, profit=(r[1]/10**d1*token1_usd - gas_usd) if r else 0.0, amt=r[2] if r else 0, dry=r[3] if r else False)
         opp = m["profit"] > min_profit_usd
         if opp and cur is None:
-            cur = dict(open_block=b, open_by_event=e is not None, dir=m["dir"], gap_open=gap, profit_open=m["profit"], profit_max=m["profit"], capped=m["dry"], amt_open=m["amt"], A=A, P=P)
+            cur = dict(open_block=b, open_by_event=e is not None, open_tx=(e["tx"] if e else None), open_idx=(e["idx"] if e else None), dir=m["dir"], gap_open=gap, profit_open=m["profit"], profit_max=m["profit"], capped=m["dry"], amt_open=m["amt"], A=A, P=P)
         elif opp: cur["profit_max"] = max(cur["profit_max"], m["profit"])
         elif cur is not None:
-            cur.update(close_block=b, blocks_open=b-cur["open_block"], closer_tx=e["tx"] if e else None, closer_sender=e["sender"] if e else None,
+            cur.update(close_block=b, blocks_open=b-cur["open_block"], closer_tx=e["tx"] if e else None, closer_idx=(e["idx"] if e else None), closer_sender=e["sender"] if e else None,
                        closer_recipient=e["recipient"] if e else None, closer_in_anchor_tx=(e["tx"] in anchor_txs) if e else None, gap_close=gap)
             windows.append(cur); cur = None
     if cur is not None:
