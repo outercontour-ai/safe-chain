@@ -1,4 +1,4 @@
-fb_record.jsonl
+fb_record*.jsonl
 *.out
 bot.log.jsonl
 chain.done
