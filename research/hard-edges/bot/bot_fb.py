@@ -39,16 +39,20 @@ class FlashBot(Bot):
             if p: p.apply(l); n += 1
             self.seen.add(key)
         return n
+    def reconcile(self, a, b):
+        try:
+            sealed = rpc("eth_getLogs", [{"address": list(POOLS.values()), "fromBlock": hex(a), "toBlock": hex(b)}])
+        except Exception as e:
+            print("reconcile error:", str(e)[:80], flush=True); return
+        with self.lock: self.apply_logs(sealed)
     def on_frame(self, block, index, n_txs, t_arrival):
         """called per flashblock; fetch pending logs (coalesced by the caller) and evaluate"""
         with self.lock:
             if block > self.cur_block:
-                # new block started: reconcile the previous (now sealed) block, prune the seen-set
-                try:
-                    sealed = rpc("eth_getLogs", [{"address": list(POOLS.values()), "fromBlock": hex(self.cur_block), "toBlock": hex(block - 1)}])
-                    self.apply_logs(sealed)
-                except Exception as e: print("reconcile error:", str(e)[:80], flush=True)
-                self.seen = {k for k in self.seen if k[0] in set()} if len(self.seen) > 50000 else self.seen
+                # new block started: reconcile the previous (now sealed) block off the hot path
+                prev_from, prev_to = self.cur_block, block - 1
+                threading.Thread(target=self.reconcile, args=(prev_from, prev_to), daemon=True).start()
+                if len(self.seen) > 50000: self.seen = set()
                 self.cur_block = block; self.head = block - 1; self.n_blocks += 1
                 if self.n_blocks % 150 == 0:
                     for p in self.pools.values(): p.refresh_fee()
