@@ -23,6 +23,6 @@ for n in names[1:]:
         # treat Y as a hard edge at its marginal price, but charge Y's fee on the conversion
         anchor = lambda b, t, sy=sy, fy=fy: sy.price(b)
         r = run(chain, c["pools"][X], days, anchor, c["d0"], c["d1"], token1_usd=1.0 if c["d1"]==6 else 3500.0, gas_usd=c["gas"],
-                min_profit_usd=0.5, label=f"{chain} {X} vs {Y} (Y fee {fy*1e4:.0f}bp not charged)", to_block=h, words=2, validate=(X==names[1]))
+                min_profit_usd=0.5, label=f"{chain} {X} vs {Y} (Y fee {fy*1e4:.0f}bp not charged)", to_block=h, words=2, validate=(X==names[1]), init_at_head=(chain=="arb"))
         out.append(r)
 json.dump(out, open(f"res_xdex_{chain}.json","w"))

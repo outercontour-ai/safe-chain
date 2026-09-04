@@ -13,7 +13,7 @@ TOPIC_BURN = "0x" + Web3.keccak(text="Burn(address,int24,int24,uint128,uint256,u
 def sqrt_at_tick(t): return 1.0001 ** (t/2)
 
 class V3Sim:
-    def __init__(self, chain, pool, ts, fee, init_block, words=3):
+    def __init__(self, chain, pool, ts, fee, init_block, words=3, pct=0.05):
         self.chain, self.pool, self.ts, self.f = chain, pool, ts, fee
         self.net = {}         # tick -> liquidityNet
         self.sqrtP = None; self.L = None; self.tick = None
@@ -23,18 +23,39 @@ class V3Sim:
         # slot0 layouts differ across forks but sqrtPriceX96 and tick are always the first two words
         self.sqrtP = sp/Q96; self.tick = tick
         self.L = call(chain, pool, "liquidity()", out=("uint128",), block=init_block)[0]
-        comp = tick // ts; w0 = comp >> 8
-        self.scan_lo = ((w0 - words) << 8) * ts; self.scan_hi = (((w0 + words + 1) << 8) - 1) * ts
-        for w in range(w0 - words, w0 + words + 1):
+        # scan only ticks within +-pct of the current price (arb moves are small); fetch ticks() in parallel
+        from concurrent.futures import ThreadPoolExecutor
+        R = int(math.log(1 + pct) / math.log(1.0001))
+        lo_c = (tick - R) // ts; hi_c = (tick + R) // ts
+        self.scan_lo = lo_c * ts; self.scan_hi = hi_c * ts
+        cand = []
+        for w in range(lo_c >> 8, (hi_c >> 8) + 1):
             bm = call(chain, pool, "tickBitmap(int16)", (w,), ("int16",), out=("uint256",), block=init_block)[0]
             if not bm: continue
             for bit in range(256):
                 if bm >> bit & 1:
-                    t = ((w << 8) + bit) * ts
-                    r = call(chain, pool, "ticks(int24)", (t,), ("int24",), block=init_block)
-                    gross, net = decode(["uint128","int128"], bytes.fromhex(r[2:66+64]))
-                    self.net[t] = net
+                    c = (w << 8) + bit
+                    if lo_c <= c <= hi_c: cand.append(c * ts)
+        def fetch(t):
+            r = call(chain, pool, "ticks(int24)", (t,), ("int24",), block=init_block)
+            gross, net = decode(["uint128","int128"], bytes.fromhex(r[2:66+64]))
+            return t, net
+        with ThreadPoolExecutor(6) as ex:
+            for t, net in ex.map(fetch, cand): self.net[t] = net
         self.n_init_ticks = len(self.net)
+    def unapply_log(self, l):
+        """Reverse a Mint/Burn (used to roll the liquidity map back from an init-at-head snapshot)."""
+        t0 = l["topics"][0]; data = bytes.fromhex(l["data"][2:])
+        if t0 == TOPIC_MINT:
+            lo = int(l["topics"][2], 16); hi = int(l["topics"][3], 16)
+            lo = lo - 2**256 if lo >= 2**255 else lo; hi = hi - 2**256 if hi >= 2**255 else hi
+            _, amt, _, _ = decode(["address","uint128","uint256","uint256"], data)
+            self.net[lo] = self.net.get(lo, 0) - amt; self.net[hi] = self.net.get(hi, 0) + amt
+        elif t0 == TOPIC_BURN:
+            lo = int(l["topics"][2], 16); hi = int(l["topics"][3], 16)
+            lo = lo - 2**256 if lo >= 2**255 else lo; hi = hi - 2**256 if hi >= 2**255 else hi
+            amt, _, _ = decode(["uint128","uint256","uint256"], data)
+            self.net[lo] = self.net.get(lo, 0) + amt; self.net[hi] = self.net.get(hi, 0) - amt
     def apply_log(self, l):
         t0 = l["topics"][0]; data = bytes.fromhex(l["data"][2:])
         if t0 == TOPIC_MINT:
@@ -115,13 +136,19 @@ def size_exact(sim, A_raw, allow):
     return best
 
 def run(chain, pool, days, anchor, d0, d1, token1_usd=1.0, allow=("0to1","1to0"), anchor_contract=None,
-        gas_usd=0.03, min_profit_usd=0.05, checkpoint_blocks=None, label="", to_block=None, verbose=True, words=3, validate=True):
+        gas_usd=0.03, min_profit_usd=0.05, checkpoint_blocks=None, label="", to_block=None, verbose=True, words=3, validate=True, init_at_head=False):
     h = to_block or head(chain); span = int(days*86400/CHAINS[chain]["block_time"]); fb = max(1, h-span)
     fee = call(chain, pool, "fee()", out=("uint24",))[0]; f = fee/1e6
     ts = call(chain, pool, "tickSpacing()", out=("int24",))[0]
     clock = BlockClock(chain, fb, h)
     logs = sorted(get_logs(chain, pool, fb, h, cache_key=f"swaps_{pool.lower()}"), key=lambda l:(int(l["blockNumber"],16), int(l["logIndex"],16)))
-    sim = V3Sim(chain, pool, ts, f, fb - 1, words=words)
+    if init_at_head:
+        # no archive needed: snapshot the tick map at h, then roll Mint/Burn back to fb-1; price state comes from the first Swap
+        sim = V3Sim(chain, pool, ts, f, h, words=words)
+        for l in reversed(logs): sim.unapply_log(l)
+        sim.sqrtP = None; sim.L = None; sim.tick = None
+    else:
+        sim = V3Sim(chain, pool, ts, f, fb - 1, words=words)
     scale = 10**(d0-d1)
     anchor_txs = {}
     if anchor_contract:
