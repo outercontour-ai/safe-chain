@@ -76,6 +76,7 @@ class PoolSim:
         self.sqrtP = int(slot0[2:66], 16) / Q96; self.tick = s2(int(slot0[66:130], 16))
         self.L = call(self.addr, "liquidity()", out=("uint128",), block=blk)[0]
         R = int(math.log(1.01) / math.log(1.0001)); lo_c = (self.tick - R) // self.ts; hi_c = (self.tick + R) // self.ts   # +-1%: arbs move prices by bps; Mint/Burn replay keeps it fresh
+        self.s_lo = 1.0001 ** (lo_c * self.ts / 2); self.s_hi = 1.0001 ** ((hi_c + 1) * self.ts / 2)   # known-liquidity window (sqrt prices)
         self.net = {}
         cand = []
         for w in range(lo_c >> 8, (hi_c >> 8) + 1):
@@ -108,11 +109,13 @@ class PoolSim:
             sgn = 1 if t0 == T_MINT else -1
             self.net[lo] = self.net.get(lo, 0) + sgn * amt; self.net[hi] = self.net.get(hi, 0) - sgn * amt; self._keys = None
     def _walk(self, zeroForOne, amount, exact_in):
-        """Generic tick walk. Returns (amount_in, amount_out, end_sqrtP). Float math, fee on input."""
+        """Generic tick walk. Returns (amount_in, amount_out, end_sqrtP), or None when the request cannot be served
+        inside the known-liquidity window (never extrapolate: an unknown tick map looks like free liquidity)."""
         s, L, tick = self.sqrtP, self.L, self.tick; keys = self.keys(); f = self.fee
         a_in = a_out = 0.0; remaining = float(amount)
         for _ in range(200):
             if remaining <= 0: break
+            if s <= self.s_lo or s >= self.s_hi: return None
             if zeroForOne:
                 i = bisect.bisect_right(keys, tick) - 1
                 nt = keys[i] if i >= 0 else None
@@ -123,7 +126,7 @@ class PoolSim:
                 nt = keys[i] if i < len(keys) else None
                 s_next = 1.0001 ** (nt / 2) if nt is not None else s * 2.0
             if L <= 0:
-                if nt is None: break
+                if nt is None: return None
                 s = s_next; L += (-self.net[nt] if zeroForOne else self.net[nt]); tick = nt - 1 if zeroForOne else nt; continue
             # max amounts to reach s_next within this range
             if zeroForOne:
@@ -135,7 +138,7 @@ class PoolSim:
             need = remaining
             if (exact_in and need >= cap_in) or ((not exact_in) and need >= cap_out):
                 a_in += cap_in; a_out += cap_out; remaining -= (cap_in if exact_in else cap_out); s = s_next
-                if nt is None: break
+                if nt is None: return None
                 L += (-self.net[nt] if zeroForOne else self.net[nt]); tick = nt - 1 if zeroForOne else nt
             else:
                 if exact_in:
@@ -148,6 +151,7 @@ class PoolSim:
                     else: s_new = 1 / (1 / s - need / L); inn = L * (s_new - s) / (1 - f)
                     a_in += inn; a_out += need
                 s = s_new; remaining = 0
+        if remaining > 0 or s <= self.s_lo or s >= self.s_hi: return None
         return a_in, a_out, s
     def exact_in(self, zeroForOne, amount): return self._walk(zeroForOne, amount, True)
     def exact_out(self, zeroForOne, amount): return self._walk(zeroForOne, amount, False)
@@ -163,8 +167,9 @@ def best_cycle(pools, eth_usd):
             A, B = pools[a], pools[b]
             for z in (True, False):        # z: sell token0 (WETH) on A
                 def profit(x):
-                    ain, aout, sA = A.exact_in(z, x)
-                    bin_, bout, sB = B.exact_out(not z, x)   # buy back x of tokenIn on B
+                    ra = A.exact_in(z, x); rb = B.exact_out(not z, x)   # buy back x of tokenIn on B
+                    if ra is None or rb is None: return -1e300, 0, 0, 0, 0
+                    ain, aout, sA = ra; bin_, bout, sB = rb
                     return aout - bin_, aout, bin_, sA, sB
                 # quick reject: marginal prices with fees
                 pA = A.sqrtP ** 2; pB = B.sqrtP ** 2
@@ -178,6 +183,7 @@ def best_cycle(pools, eth_usd):
                     else: lo = c
                     c, d = hi - gr * (hi - lo), lo + gr * (hi - lo)
                 x = (lo + hi) / 2; p, aout, bin_, sA, sB = profit(x)
+                if p <= -1e299: continue
                 usd = p / 10 ** (D1 if z else D0) * (1.0 if z else eth_usd)
                 if best is None or usd > best["usd"]:
                     best = dict(sell=a, buy=b, z=z, x=x, profit=p, usd=usd, out_sell=aout, in_buy=bin_, sA=sA, sB=sB)
