@@ -68,4 +68,4 @@ for th in THRESHOLDS:
             (won if our < their else lost).append(w)
         gas_lost = len(lost) * 0.006
         print(f"   latency {L} flashblock(s): won {len(won)}/{len(ws)} -> net ${sum(w['net'] for w in won):,.0f}/day, lost {len(lost)} reverts ≈ -${gas_lost:.1f}; median won ${sorted(w['net'] for w in won)[len(won)//2] if won else 0:.2f}")
-json.dump({str(th): opps[th] for th in THRESHOLDS}, open("res_day_backtest.json", "w"))
+json.dump({str(th): opps[th] for th in THRESHOLDS}, open(f"res_day_{b_end}.json", "w"))
