@@ -211,8 +211,8 @@ class Bot:
         self.head = n; self.n_blocks += 1
         if self.n_blocks % 150 == 0:
             for p in self.pools.values(): p.refresh_fee()
-        if self.n_blocks % 20000 == 0:
-            for p in self.pools.values(): p.init_state(n)     # periodic resync of the tick map (~11h); takes a few minutes on public RPC
+        for p in self.pools.values():
+            if p.sqrtP is not None and not (p.s_lo < p.sqrtP < p.s_hi): p.init_state(n)   # price left the known window: resync the tick map
         eth = self.eth_usd(); b = best_cycle(self.pools, eth)
         gas_price = int(rpc("eth_gasPrice", []), 16) / 1e9
         gas_usd = GAS_UNITS * (gas_price + PRIORITY_GWEI) * 1e-9 * eth + L1_FEE_USD

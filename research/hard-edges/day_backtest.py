@@ -34,10 +34,13 @@ addr_to = {p.addr: p for p in pools.values()}
 cur = {th: None for th in THRESHOLDS}
 opps = {th: [] for th in THRESHOLDS}
 n_swaps = 0; n_eval = 0
+n_resync = 0
 for l in logs:
     p = addr_to.get(l["address"].lower()); p.apply(l)
     if l["topics"][0] not in (TOPIC_UNIV3, TOPIC_PCSV3): continue
     n_swaps += 1
+    if not (p.s_lo < p.sqrtP < p.s_hi):
+        p.init_state(int(l["blockNumber"], 16)); n_resync += 1     # price left the known window: resync like the live bot
     blk = int(l["blockNumber"], 16); ti = int(l["transactionIndex"], 16); txh = l["transactionHash"]
     eth = pools["uni"].sqrtP ** 2 * 10 ** (D0 - D1)
     b = best_cycle(pools, eth); n_eval += 1
@@ -52,7 +55,7 @@ for l in logs:
         elif net < th and c is not None:
             c.update(close_block=blk, close_ti=ti, close_fb=fb_of(ti), closer=("0x"+l["topics"][1][-40:]), close_tx=txh)
             opps[th].append(c); cur[th] = None
-print(f"day {b_start}-{b_end}: swaps {n_swaps}, evaluated {n_eval} in {time.time()-t0:.0f}s", flush=True)
+print(f"day {b_start}-{b_end}: swaps {n_swaps}, evaluated {n_eval}, tick-map resyncs {n_resync} in {time.time()-t0:.0f}s", flush=True)
 for th in THRESHOLDS:
     ws = [w for w in opps[th] if "close_block" in w]
     print(f"\n== threshold ${th}: opportunities {len(ws)} | gross at open sum ${sum(w['gross'] for w in ws):,.0f} | net at open sum ${sum(w['net'] for w in ws):,.0f}")
